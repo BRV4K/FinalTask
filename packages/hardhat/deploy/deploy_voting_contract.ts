@@ -1,36 +1,26 @@
-import { HardhatRuntimeEnvironment } from "hardhat/types"; // Импорт типов для среды выполнения Hardhat
-import { DeployFunction } from "hardhat-deploy/types"; // Импорт типа функции деплоя
-import { VotingContract } from "../typechain-types"; // Импорт типов сгенерированного контракта
+import { HardhatRuntimeEnvironment } from "hardhat/types"; // Import Hardhat runtime environment types
+import { DeployFunction } from "hardhat-deploy/types"; // Import deploy function types
+import { VotingContract } from "../typechain-types"; // Import types for the VotingContract
 
 /**
- * Скрипт для деплоя смарт-контракта VotingContract.
- * Использует Hardhat Runtime Environment для доступа к необходимым функциям и данным.
+ * Deployment script for the VotingContract.
+ * Utilizes Hardhat Runtime Environment (HRE) for deployment functions and utilities.
  *
- * @param hre Объект среды выполнения Hardhat.
+ * @param hre Hardhat runtime environment object.
  */
-const deployVotingContract: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-  // Извлечение имени учетной записи для деплоя
+const deployPollManager: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
+  // Extract the deployer account
   const { deployer } = await hre.getNamedAccounts();
-  // Получение функции для развертывания контрактов
-  const { deploy } = hre.deployments;
 
-  // Развертывание контракта VotingContract
-  await deploy("VotingContract", {
-    from: deployer, // Учетная запись, которая развертывает контракт
-    args: [], // Аргументы конструктора контракта (в данном случае отсутствуют)
-    log: true, // Включение логирования процесса развертывания
-    autoMine: true, // Автоматическое майнинг транзакции на локальной сети
-  });
+  // Retrieve an instance of the deployed contract
+  const pollManagerInstance = await hre.ethers.getContract<VotingContract>("PollManager", deployer);
 
-  // Получение экземпляра развернутого контракта
-  const votingContract = await hre.ethers.getContract<VotingContract>("VotingContract", deployer);
-
-  // Проверка успешного развертывания контракта через вызов метода greeting()
-  console.log("👋 Initial greeting:", await votingContract.greeting());
+  // Confirm successful deployment by invoking a sample method
+  console.log("🚀 Deployment successful! Contract greeting:", await pollManagerInstance.greeting());
 };
 
-// Экспорт функции для использования в командах Hardhat
-export default deployVotingContract;
+// Export the deployment function for Hardhat usage
+export default deployPollManager;
 
-// Присвоение тега для удобного выбора скрипта при выполнении
-deployVotingContract.tags = ["VotingContract"];
+// Assign a tag to the script for easier selection during Hardhat commands
+deployPollManager.tags = ["PollManager"];
