@@ -1,77 +1,77 @@
-import EndPoll from "~~/components/EndPoll";
-import HasUserVoted from "~~/components/HasUserVoted";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
 export default function PollList() {
-  // Чтение количества существующих голосований
   const { data: pollCount } = useScaffoldReadContract({
-    contractName: "VotingContract", // Имя контракта
-    functionName: "getPollCount", // Имя функции для получения количества голосований
+    contractName: "VotingContract",
+    functionName: "getPollCount",
   });
 
-  // Функция для рендеринга списка голосований
   const renderPolls = () => {
-    if (!pollCount) return <p>Загрузка...</p>; // Пока данные не загружены, показываем индикатор загрузки
-    const polls = [];
-    for (let i: number = 0; i < pollCount; i++) {
-      polls.push(<PollItem key={i} pollId={BigInt(i)} />); // Генерируем компоненты для каждого голосования
-    }
-    return polls;
+    if (!pollCount) return <p className="text-center text-gray-500">Loading polls...</p>;
+    return Array.from({ length: Number(pollCount) }, (_, index) => <PollItem key={index} pollId={BigInt(index)} />);
   };
 
   return (
-    <div className="p-6 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg shadow-lg mx-auto">
-      <h2 className="text-2xl font-bold mb-4">Список голосований</h2>
-      {pollCount && pollCount > 0 ? renderPolls() : <p className="text-xl">Нет активных голосований</p>}
-      {/*Если голосования есть, показываем их*/}
-    </div>
+    <section className="bg-gray-100 p-5 rounded-md shadow-md max-w-3xl mx-auto">
+      <h2 className="text-2xl font-semibold text-center mb-4">Active Polls</h2>
+      {pollCount && pollCount > 0 ? (
+        <div className="space-y-4">{renderPolls()}</div>
+      ) : (
+        <p className="text-center text-gray-600">No polls available</p>
+      )}
+    </section>
   );
 }
 
-// Компонент для каждого отдельного голосования
 function PollItem({ pollId }: { pollId: bigint }) {
-  const { data } = useScaffoldReadContract({
-    contractName: "VotingContract", // Имя контракта
-    functionName: "getPollDetails", // Функция для получения данных голосования
-    args: [BigInt(pollId)], // Идентификатор голосования
+  const { data: pollDetails } = useScaffoldReadContract({
+    contractName: "VotingContract",
+    functionName: "getPollDetails",
+    args: [pollId],
   });
 
-  const { writeContractAsync } = useScaffoldWriteContract({
-    contractName: "VotingContract", // Имя контракта
+  const { writeContractAsync: vote } = useScaffoldWriteContract({
+    contractName: "VotingContract",
   });
 
-  if (!data) return <p>Загрузка...</p>; // Пока данные не загружены, показываем индикатор
+  if (!pollDetails) return <p className="text-center text-gray-500">Loading poll details...</p>;
 
-  const [question, options, , isActive] = data; // Получаем вопрос, варианты ответов и статус голосования
+  const [question, options, , isActive] = pollDetails;
+
+  const handleVote = async (optionIndex: number) => {
+    if (!isActive) {
+      alert("Voting is already completed.");
+      return;
+    }
+    try {
+      await vote({
+        functionName: "vote",
+        args: [pollId, BigInt(optionIndex)],
+      });
+      alert(`You voted for option ${optionIndex + 1}`);
+    } catch (error: any) {
+      console.error("Vote failed:", error);
+      alert(error.reason || "An error occurred while voting.");
+    }
+  };
+
   return (
-    <div className="bg-white p-4 rounded-lg shadow-md mb-4">
-      <h3 className="text-xl font-semibold text-black">{question}</h3>
-      <ul className="mt-2 mb-4">
-        {options.map((opt: string, idx: number) => (
-          <li key={idx} className="flex justify-between items-center">
-            <span className="text-black">{opt}</span>
-            {isActive && (
-              <button
-                onClick={() =>
-                  writeContractAsync({
-                    functionName: "vote", // Функция для голосования
-                    args: [BigInt(pollId), BigInt(idx)], // По умолчанию голосуем за первый вариант
-                  })
-                } // Отправка голоса
-                className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
-              >
-                Голосовать
-              </button>
-            )}
+    <div className="bg-white p-4 rounded-md shadow-md">
+      <h3 className="text-lg font-semibold text-gray-800 mb-2">{question}</h3>
+      <ul className="space-y-2">
+        {options.map((option: string, idx: number) => (
+          <li
+            key={idx}
+            onClick={() => handleVote(idx)}
+            className={`flex justify-between items-center bg-gray-50 p-2 rounded shadow cursor-pointer ${
+              isActive ? "hover:bg-blue-100" : "cursor-not-allowed opacity-50"
+            }`}
+          >
+            <span className="text-gray-700 font-medium">{option}</span>
           </li>
         ))}
       </ul>
-      {!isActive && <p className="text-red-500">Голосование завершено</p>}
-      {/*Показываем сообщение, если голосование завершено*/}
-      {isActive && <EndPoll pollId={pollId} />}
-      {/* Отображаем кнопку для завершения голосования, если оно активно */}
-      <HasUserVoted pollId={pollId} />
-      {/* Статус голосования пользователя */}
+      <p className="text-sm mt-2 text-gray-600">{isActive ? "Poll is active" : "Poll has ended"}</p>
     </div>
   );
 }
