@@ -3,81 +3,81 @@ import { expect } from "chai";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { VotingContract } from "../typechain-types";
 
-describe("votingContract Contract", function () {
-  let votingContract: VotingContract;
-  let owner: HardhatEthersSigner;
-  let addr1: HardhatEthersSigner;
-  let addr2: HardhatEthersSigner;
+describe("PollManager Contract", function () {
+  let pollManager: VotingContract;
+  let deployer: HardhatEthersSigner;
+  let user1: HardhatEthersSigner;
+  let user2: HardhatEthersSigner;
 
   beforeEach(async () => {
-    const votingContractFactory = await ethers.getContractFactory("VotingContract");
-    votingContract = await votingContractFactory.deploy();
-    await votingContract.waitForDeployment();
+    const pollManagerFactory = await ethers.getContractFactory("VotingContract");
+    pollManager = await pollManagerFactory.deploy();
+    await pollManager.waitForDeployment();
 
-    [owner, addr1, addr2] = await ethers.getSigners();
+    [deployer, user1, user2] = await ethers.getSigners();
   });
 
   it("Should create a poll successfully", async () => {
-    const options = ["Option 1", "Option 2"];
-    await votingContract.createPoll("Test Question", options, 3600);
+    const answers = ["Option A", "Option B"];
+    await pollManager.createPoll("Sample Question", answers, 3600);
 
-    const poll = await votingContract.getPollDetails(0);
-    expect(poll.question).to.equal("Test Question");
-    expect(poll.options).to.deep.equal(options);
+    const poll = await pollManager.getPollDetails(0);
+    expect(poll.question).to.equal("Sample Question");
+    expect(poll.options).to.deep.equal(answers);
     expect(poll.isActive).to.equal(true);
-    expect(poll.creator).to.equal(owner.address);
+    expect(poll.creator).to.equal(deployer.address);
   });
 
-  it("Should not allow poll creation with less than 2 options", async () => {
-    await expect(votingContract.createPoll("Test Question", ["Option 1"], 3600)).to.be.revertedWith(
+  it("Should reject poll creation with less than 2 options", async () => {
+    await expect(pollManager.createPoll("Invalid Poll", ["Single Option"], 3600)).to.be.revertedWith(
       "There must be at least two possible answers",
     );
   });
 
-  it("Should allow a user to vote", async () => {
-    await votingContract.createPoll("Test Question", ["Option 1", "Option 2"], 3600);
+  it("Should allow a user to cast a vote", async () => {
+    await pollManager.createPoll("Voting Example", ["Option A", "Option B"], 3600);
 
-    await votingContract.connect(addr1).vote(0, 0);
-    const hasVoted = await votingContract.hasUserVoted(0, addr1.address);
+    await pollManager.connect(user1).vote(0, 0);
+    const hasVoted = await pollManager.hasUserVoted(0, user1.address);
     expect(hasVoted).to.equal(true);
   });
 
-  it("Should prevent duplicate votingContract", async () => {
-    await votingContract.createPoll("Test Question", ["Option 1", "Option 2"], 3600);
+  it("Should prevent duplicate votes", async () => {
+    await pollManager.createPoll("Duplicate Vote Check", ["Option A", "Option B"], 3600);
 
-    await votingContract.connect(addr1).vote(0, 0);
-    await expect(votingContract.connect(addr1).vote(0, 0)).to.be.revertedWith("You have already voted");
+    await pollManager.connect(user1).vote(0, 0);
+    await expect(pollManager.connect(user1).vote(0, 0)).to.be.revertedWith("You have already voted");
   });
 
-  it("Should allow only the creator to end the poll", async () => {
-    await votingContract.createPoll("Test Question", ["Option 1", "Option 2"], 1);
+  it("Should allow only the creator to close the poll", async () => {
+    await pollManager.createPoll("Close Poll Example", ["Option A", "Option B"], 1);
 
-    // Forward time to ensure poll can be ended
+    // Advance time to allow poll closure
     await ethers.provider.send("evm_increaseTime", [2]);
     await ethers.provider.send("evm_mine", []);
 
-    await votingContract.endPoll(0);
-    const poll = await votingContract.getPollDetails(0);
+    await pollManager.endPoll(0);
+    const poll = await pollManager.getPollDetails(0);
     expect(poll.isActive).to.equal(false);
   });
 
-  it("Should not allow ending the poll prematurely", async () => {
-    await votingContract.createPoll("Test Question", ["Option 1", "Option 2"], 3600);
-    await expect(votingContract.endPoll(0)).to.be.revertedWith("Voting is still active");
+  it("Should prevent premature poll closure", async () => {
+    await pollManager.createPoll("Early Closure", ["Option A", "Option B"], 3600);
+    await expect(pollManager.endPoll(0)).to.be.revertedWith("Voting is still active");
   });
 
-  it("Should return poll results correctly", async () => {
-    await votingContract.createPoll("Test Question", ["Option 1", "Option 2"], 3600);
-    await votingContract.connect(addr1).vote(0, 0);
-    await votingContract.connect(addr2).vote(0, 1);
+  it("Should return correct poll results", async () => {
+    await pollManager.createPoll("Result Verification", ["Option A", "Option B"], 3600);
+    await pollManager.connect(user1).vote(0, 0);
+    await pollManager.connect(user2).vote(0, 1);
 
-    // Forward time to ensure poll can be ended
+    // Advance time for poll closure
     await ethers.provider.send("evm_increaseTime", [3600]);
     await ethers.provider.send("evm_mine", []);
 
-    await votingContract.endPoll(0);
+    await pollManager.endPoll(0);
 
-    const results = await votingContract.getResults(0);
+    const results = await pollManager.getResults(0);
     expect(results.voteCounts[0]).to.equal(1n);
     expect(results.voteCounts[1]).to.equal(1n);
   });

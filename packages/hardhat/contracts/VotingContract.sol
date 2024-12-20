@@ -2,136 +2,133 @@
 pragma solidity ^0.8.0;
 
 /**
- * @title Смарт-контракт для голосования
- * @dev Позволяет создавать голосования, голосовать и завершать голосования с подсчетом голосов, а также проверять проголосовал ли пользователь
+ * @title Decentralized Voting System
+ * @dev Enables poll creation, voting, and result management with tamper-proof mechanisms.
  */
-contract VotingContract {
-    string public greeting = "Building Unstoppable Apps!!!";
+contract DecentralizedVoting {
+    string public constant platformMessage = "Empowering Transparent Decisions!";
 
-    // Структура, описывающая голосование
+    // Poll structure definition
     struct Poll {
-        string question; // Вопрос голосования
-        string[] options; // Варианты ответа
-        mapping(uint => uint) voteCounts; // Количество голосов для каждого варианта
-        mapping(address => bool) hasVoted; // Отслеживание проголосовавших участников
-        uint endTime; // Время завершения голосования
-        bool isActive; // Статус активности голосования
-        address creator; // Создатель голосования
+        string title; // Poll question
+        string[] answers; // List of options
+        mapping(uint => uint) votes; // Vote tally per option
+        mapping(address => bool) participants; // Track voters
+        uint expiration; // Poll expiration timestamp
+        bool active; // Poll activity status
+        address owner; // Creator of the poll
     }
 
-    // Список всех созданных голосований
-    Poll[] public polls;
+    // Array to store all polls
+    Poll[] private allPolls;
 
     /**
-     * @dev Создает новое голосование.
-     * @param _question Вопрос голосования.
-     * @param _options Варианты ответа для голосования.
-     * @param _duration Продолжительность голосования в секундах.
+     * @notice Creates a new poll.
+     * @param _title The question for the poll.
+     * @param _answers List of options for the poll.
+     * @param _duration Poll duration in seconds.
      */
-    function createPoll(string memory _question, string[] memory _options, uint _duration) public {
-        require(_options.length > 1, "There must be at least two possible answers");
-        require(_duration > 0, "The duration must be greater than zero");
+    function initiatePoll(string memory _title, string[] memory _answers, uint _duration) external {
+        require(_answers.length > 1, "Provide at least two options.");
+        require(_duration > 0, "Duration must be positive.");
 
-        Poll storage newPoll = polls.push();
-        newPoll.question = _question;
-        newPoll.options = _options;
-        newPoll.endTime = block.timestamp + _duration;
-        newPoll.isActive = true;
-        newPoll.creator = msg.sender;
-    }
-
-    /**
-     * @dev Голосует за определенный вариант в голосовании.
-     * @param _pollId ID голосования.
-     * @param _optionIndex Индекс выбранного варианта.
-     */
-    function vote(uint _pollId, uint _optionIndex) public {
-        require(_pollId < polls.length, "Voting with such an ID does not exist");
-        Poll storage poll = polls[_pollId];
-
-        require(block.timestamp < poll.endTime, "The voting is completed");
-        require(poll.isActive, "Voting is not active");
-        require(!poll.hasVoted[msg.sender], "You have already voted");
-        require(_optionIndex < poll.options.length, "Invalid option index");
-
-        // Устанавливаем, что пользователь проголосовал
-        poll.hasVoted[msg.sender] = true;
-        // Увеличиваем счетчик голосов для выбранного варианта
-        poll.voteCounts[_optionIndex]++;
+        Poll storage newPoll = allPolls.push();
+        newPoll.title = _title;
+        newPoll.answers = _answers;
+        newPoll.expiration = block.timestamp + _duration;
+        newPoll.active = true;
+        newPoll.owner = msg.sender;
     }
 
     /**
-     * @dev Завершает голосование и деактивирует его.
-     * @param _pollId ID голосования.
+     * @notice Allows a user to vote on a poll.
+     * @param _pollId The ID of the poll.
+     * @param _optionIndex The index of the selected option.
      */
-    function endPoll(uint _pollId) public {
-        require(_pollId < polls.length, "Voting with such an ID does not exist");
-        Poll storage poll = polls[_pollId];
+    function castVote(uint _pollId, uint _optionIndex) external {
+        require(_pollId < allPolls.length, "Poll does not exist.");
+        Poll storage selectedPoll = allPolls[_pollId];
 
-        require(block.timestamp >= poll.endTime, "Voting is still active");
-        require(poll.isActive, "The voting has already been completed");
-        require(msg.sender == poll.creator, "Only the creator can complete the voting");
+        require(block.timestamp < selectedPoll.expiration, "Poll has ended.");
+        require(selectedPoll.active, "Poll is inactive.");
+        require(!selectedPoll.participants[msg.sender], "Already voted.");
+        require(_optionIndex < selectedPoll.answers.length, "Invalid option.");
 
-        // Деактивируем голосование
-        poll.isActive = false;
+        selectedPoll.participants[msg.sender] = true;
+        selectedPoll.votes[_optionIndex]++;
     }
 
     /**
-     * @dev Получает результаты голосования.
-     * @param _pollId ID голосования.
-     * @return options Массив вариантов ответа.
-     * @return voteCounts Массив количества голосов для каждого варианта.
+     * @notice Ends a poll, making it inactive.
+     * @param _pollId The ID of the poll.
      */
-    function getResults(uint _pollId) public view returns (string[] memory options, uint[] memory voteCounts) {
-        require(_pollId < polls.length, "Voting with such an ID does not exist");
-        Poll storage poll = polls[_pollId];
+    function closePoll(uint _pollId) external {
+        require(_pollId < allPolls.length, "Poll does not exist.");
+        Poll storage poll = allPolls[_pollId];
 
-        options = poll.options;
-        voteCounts = new uint[](poll.options.length);
+        require(block.timestamp >= poll.expiration, "Poll is still active.");
+        require(poll.active, "Poll already closed.");
+        require(msg.sender == poll.owner, "Only the creator can close the poll.");
 
-        for (uint i = 0; i < poll.options.length; i++) {
-            voteCounts[i] = poll.voteCounts[i];
+        poll.active = false;
+    }
+
+    /**
+     * @notice Fetches poll results.
+     * @param _pollId The ID of the poll.
+     * @return answers List of options.
+     * @return voteTallies Vote count for each option.
+     */
+    function retrieveResults(uint _pollId) external view returns (string[] memory answers, uint[] memory voteTallies) {
+        require(_pollId < allPolls.length, "Poll does not exist.");
+        Poll storage poll = allPolls[_pollId];
+
+        answers = poll.answers;
+        voteTallies = new uint[](poll.answers.length);
+
+        for (uint i = 0; i < poll.answers.length; i++) {
+            voteTallies[i] = poll.votes[i];
         }
     }
 
     /**
-     * @dev Возвращает общее количество голосований.
-     * @return Количество созданных голосований.
+     * @notice Retrieves the total number of polls created.
+     * @return The number of polls.
      */
-    function getPollCount() public view returns (uint) {
-        return polls.length;
+    function totalPolls() external view returns (uint) {
+        return allPolls.length;
     }
 
     /**
-     * @dev Возвращает информацию о голосовании по его ID.
-     * @param _pollId ID голосования.
-     * @return question Вопрос голосования.
-     * @return options Массив вариантов ответа.
-     * @return endTime Время завершения голосования.
-     * @return isActive Статус активности голосования.
-     * @return creator Адрес создателя голосования.
+     * @notice Fetches poll details.
+     * @param _pollId The ID of the poll.
+     * @return title Poll question.
+     * @return answers List of options.
+     * @return expiration Poll expiration timestamp.
+     * @return active Poll activity status.
+     * @return owner Address of the poll creator.
      */
-    function getPollDetails(uint _pollId) public view returns (
-        string memory question,
-        string[] memory options,
-        uint endTime,
-        bool isActive,
-        address creator
+    function pollInfo(uint _pollId) external view returns (
+        string memory title,
+        string[] memory answers,
+        uint expiration,
+        bool active,
+        address owner
     ) {
-        require(_pollId < polls.length, "Voting with such an ID does not exist");
-        Poll storage poll = polls[_pollId];
-        return (poll.question, poll.options, poll.endTime, poll.isActive, poll.creator);
+        require(_pollId < allPolls.length, "Poll does not exist.");
+        Poll storage poll = allPolls[_pollId];
+        return (poll.title, poll.answers, poll.expiration, poll.active, poll.owner);
     }
 
     /**
-     * @dev Проверяет, голосовал ли пользователь в данном голосовании.
-     * @param _pollId ID голосования.
-     * @param _voter Адрес пользователя.
-     * @return True, если пользователь уже голосовал, иначе False.
+     * @notice Checks if a user has voted in a poll.
+     * @param _pollId The ID of the poll.
+     * @param _voter Address of the user.
+     * @return True if the user has voted, otherwise false.
      */
-    function hasUserVoted(uint _pollId, address _voter) public view returns (bool) {
-        require(_pollId < polls.length, "Voting with such an ID does not exist");
-        Poll storage poll = polls[_pollId];
-        return poll.hasVoted[_voter];
+    function hasVoted(uint _pollId, address _voter) external view returns (bool) {
+        require(_pollId < allPolls.length, "Poll does not exist.");
+        Poll storage poll = allPolls[_pollId];
+        return poll.participants[_voter];
     }
 }
